@@ -1,28 +1,34 @@
-# MyTerminal
+# D-CATT
 
-A modern, customizable, cross-platform terminal emulator built with **Python and PySide6**.
+### Developer's Configurable Advanced Terminal Toolkit
 
-MyTerminal is designed to provide a clean terminal experience out of the box while giving users complete control over how their terminal looks and behaves.
+D-CATT is a modern, customizable, cross-platform terminal emulator built with **Python and PySide6**.
+
+It is designed for developers who want a terminal that is simple to use out of the box while still providing deep customization through human-readable configuration files.
+
+---
 
 ## ✨ Features
 
-* 🖥️ Cross-platform support for **Linux, Windows and macOS**
-* 🎨 Customizable fonts, colors, cursor and terminal appearance
-* ⚙️ **JSON-based configuration** for advanced customization
-* ⌨️ Fully customizable keyboard shortcuts
-* 🎭 Built-in themes and configuration presets
-* 📑 Multiple terminal tabs
-* 🐚 Uses the system's native shell
-* ⚡ Responsive, asynchronous terminal I/O
-* 🔧 GUI settings for users who prefer a graphical interface
-* 📝 Direct configuration through human-readable files
-* 📦 Standalone releases that can be installed and used without manually setting up Python or dependencies
+* 🖥️ **Cross-platform** — Linux, Windows and macOS
+* 🎨 **Customizable appearance** — fonts, colors, cursor, opacity and more
+* ⚙️ **JSON-based configuration**
+* ⌨️ **Custom keyboard shortcuts**
+* 🎭 **Built-in themes and configuration presets**
+* 📑 **Multiple terminal tabs**
+* 🐚 **Native shell support**
+* ⚡ **Responsive asynchronous terminal I/O**
+* 🔧 **Graphical settings interface**
+* 📝 **Direct configuration through editable files**
+* 📦 **Standalone application releases**
+
+---
 
 ## ⚙️ Configuration
 
-MyTerminal follows a configuration-first approach.
+D-CATT follows a **configuration-first approach**.
 
-Instead of forcing users to configure everything through a graphical settings panel, important settings are stored in simple, human-readable JSON files.
+Users can configure the terminal through the graphical settings interface or directly edit its human-readable configuration files.
 
 Example:
 
@@ -35,16 +41,29 @@ Example:
 }
 ```
 
-Users can modify their configuration directly or use the built-in settings interface.
+Configuration can be separated into different files for different aspects of the terminal, such as:
 
-Themes, keyboard shortcuts and other preferences can be customized independently, making the terminal easy to personalize without modifying the source code.
+```text
+D-CATT/
+└── config/
+    ├── config.json
+    ├── keybindings.json
+    └── themes/
+        ├── default.json
+        ├── nord.json
+        └── dracula.json
+```
+
+This makes D-CATT highly customizable without requiring users to modify the source code.
+
+---
 
 ## 🏗️ Architecture
 
-MyTerminal separates the user interface from the terminal backend and platform-specific functionality.
+D-CATT separates the graphical interface, terminal core and operating-system-specific functionality.
 
 ```text
-MyTerminal
+D-CATT
 │
 ├── GUI
 │   ├── Main Window
@@ -57,13 +76,17 @@ MyTerminal
 │   ├── ANSI Parser
 │   └── Configuration
 │
-└── Platform Layer
-    ├── Linux
-    ├── Windows
-    └── macOS
+├── Systems
+│   ├── Linux
+│   ├── Windows
+│   └── macOS
+│
+└── Utilities
 ```
 
-This allows the core terminal functionality to remain independent from the operating system while platform-specific implementations handle the differences between Linux, Windows and macOS.
+This architecture keeps platform-specific functionality separated while allowing the main terminal logic to remain portable.
+
+---
 
 ## 🛠️ Built With
 
@@ -73,23 +96,29 @@ This allows the core terminal functionality to remain independent from the opera
 * **SQLite**
 * **JSON**
 
-## 🎯 Philosophy
+---
 
-MyTerminal follows a simple principle:
+## 🎯 Philosophy
 
 > **Simple by default. Powerful when customized.**
 
-The goal is not to overwhelm users with configuration, while still providing enough control for users who want to fine-tune their terminal through configuration files.
+D-CATT is built around the idea that customization should not require sacrificing convenience.
 
-## 📥 Installation
+Users who simply want a terminal can launch D-CATT and start working immediately.
 
-MyTerminal is distributed as a standalone application for supported platforms.
+Power users can open the configuration files and customize the experience to their exact preferences.
 
-Users can download the appropriate release from **GitHub Releases**, install or extract it, and start using the terminal without manually installing Python or project dependencies.
+---
 
-### Development
+## 📦 Installation
 
-Developers can run the project directly from source:
+D-CATT is distributed as a standalone application for supported platforms.
+
+Download the appropriate release for your operating system from **GitHub Releases**, install or extract it, and start using D-CATT without manually installing Python or project dependencies.
+
+### 🛠️ Running from Source
+
+For development:
 
 ```bash
 git clone https://github.com/realmanish96-source/Terminal.git
@@ -98,6 +127,37 @@ pip install -r requirements.txt
 python main.py
 ```
 
+---
+
+## 📁 Project Structure
+
+```text
+Terminal/
+│
+├── main.py
+├── README.md
+├── requirements.txt
+├── LICENSE
+│
+└── app/
+    ├── core/
+    ├── gui/
+    ├── systems/
+    └── utils/
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions, suggestions and improvements are welcome.
+
+If you find a bug or have an idea that could improve D-CATT, feel free to open an issue or submit a pull request.
+
+---
+
 ## 📄 License
 
-MyTerminal is released under the **MIT License**.
+D-CATT is released under the **MIT License**.
+
+Copyright © 2026 Expensive Money.
