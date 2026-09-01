@@ -1,20 +1,30 @@
 import sys
-from PySide6.QtWidgets import QApplication,QPushButton,QLabel,QWidget,QVBoxLayout, QHBoxLayout
+from PySide6.QtWidgets import QApplication,QPushButton,QLabel,QWidget,QVBoxLayout, QHBoxLayout,QMainWindow
+from PySide6.QtCore import Qt
 
-class Main_terminal_Window(QWidget):
+class MainTerminalWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.initUI()
-        self.default_font = QLabel("Hello and Welcome to the D-CATT",self)
 
     def initUI(self):
         self.setWindowTitle("D-CATT")
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        vertical_layout = QVBoxLayout(central_widget)
+
+        self.default_font = QLabel("Hello and Welcome to the D-CATT")
+        vertical_layout.addWidget(self.default_font)
+
+        self.default_font.setAlignment(Qt.AlignTop)
+        
+
         
 
 
 def Front_Window():
     terminal = QApplication(sys.argv)
-    window = Main_terminal_Window()
+    window = MainTerminalWindow()
     window.showMaximized()
     sys.exit(terminal.exec())
 
