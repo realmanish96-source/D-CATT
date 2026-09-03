@@ -1,7 +1,6 @@
 import sys
-from PySide6.QtWidgets import QApplication,QPushButton,QLabel,QWidget,QVBoxLayout, QHBoxLayout,QMainWindow,QSplashScreen
+from PySide6.QtWidgets import QApplication,QPushButton,QLabel,QWidget,QVBoxLayout, QHBoxLayout,QMainWindow
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap,QIcon
 
 class MainTerminalWindow(QMainWindow):
     def __init__(self):
@@ -33,23 +32,8 @@ class MainTerminalWindow(QMainWindow):
 
 def Front_Window():
     terminal = QApplication(sys.argv)
-
-    #logo
-    terminal.setWindowIcon(QIcon("D-CATT\\app\\assets\\D-CATT logo.png"))
-    #splash screen
-    pixmap = QPixmap("D-CATT\\app\\assets\\D-CATT logo.png")
-    pixmap = pixmap.scaled(
-        200,
-        200,
-        Qt.KeepAspectRatio,
-        Qt.SmoothTransformation
-    )
-    splash = QSplashScreen(pixmap)
-    splash.show()
-
     window = MainTerminalWindow()
     window.showMaximized()
-    splash.finish(window)
     sys.exit(terminal.exec())
 
 
