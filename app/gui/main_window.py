@@ -37,6 +37,7 @@ class MainTerminalWindow(QMainWindow):
     def textarea(self):
         self.termainlediting = QPlainTextEdit()
         self.vertical_layout.addWidget(self.termainlediting)
+        self.termainlediting.setPlaceholderText("Let's Get Started!")
 
         
 
