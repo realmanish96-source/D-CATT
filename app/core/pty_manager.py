@@ -1,43 +1,82 @@
+
 import pty
 import os
 import select
-import sys
 
-pid, fd = pty.fork()
 
-if pid == 0:
-    os.execlp("bash", "bash")
+class PTYManager:
+    def __init__(self):
+        self.pid = None
+        self.fd = None
 
-else:
-    print(f"Child PID: {pid}, PTY FD: {fd}", flush=True)
+    def start(self):
+        self.pid, self.fd = pty.fork()
+
+        if self.pid == 0:
+            os.execlp("bash", "bash")
+
+    def write(self, data):
+        if self.fd is None:
+            return
+
+        os.write(self.fd, data)
+
+    def read(self):
+        if self.fd is None:
+            return None
+
+        readable, _, _ = select.select(
+            [self.fd], [], [], 0.1
+        )
+
+        if self.fd in readable:
+            return os.read(self.fd, 1024)
+
+        return None
+
+    def close(self):
+        if self.fd is None:
+            return
+
+        os.close(self.fd)
+        self.fd = None
+
+
+if __name__ == "__main__":
+    manager = PTYManager()
+    manager.start()
+
+    print(
+        f"PID: {manager.pid}, FD: {manager.fd}",
+        flush=True
+    )
 
     try:
         while True:
-            readable, _, _ = select.select([fd, 0], [], [], 1.0)
+            readable, _, _ = select.select(
+                [0, manager.fd], [], [], 0.1
+            )
+            readable.append(0)
 
             # Keyboard input -> Bash
             if 0 in readable:
-                data = os.read(0, 1024)
+                data = os.read(0,1024)
+                print(f"keyboard input :{data!r}",flush=True)
 
                 if not data:
                     break
 
-                os.write(fd, data)
+                manager.write(data)
 
-            # Bash output -> terminal
-            if fd in readable:
-                try:
-                    data = os.read(fd, 1024)
-                except OSError:
-                    break
+            # Bash output -> Terminal
+            if manager.fd in readable:
+                data = manager.read()
 
-                if not data:
-                    break
-
-                os.write(1, data)
+                if data:
+                    os.write(1, data)
 
     except KeyboardInterrupt:
         pass
 
     finally:
-        os.close(fd)
+        manager.close()
