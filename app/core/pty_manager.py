@@ -11,6 +11,7 @@ class PTYManager:
     def __init__(self):
         self.pid = None
         self.fd = None
+        self.exit_status = None
 
     def start(self):
         self.pid, self.fd = pty.fork()
@@ -37,11 +38,36 @@ class PTYManager:
         return None
 
     def close(self):
-        if self.fd is None:
-            return
-
-        os.close(self.fd)
+        #close the file descripter
+        fd = self.fd
         self.fd = None
+
+        try:
+            if fd is not None:
+                os.close(fd)
+
+        finally:
+            #child process reaper
+            pid = self.pid
+
+            if pid is not None:
+                try:
+                    while True:
+                        try:
+                            waitedpid, status = os.waitpid(pid,0)
+                            break
+
+                        except InterruptedError:
+                            continue
+
+                    self.exit_status = status
+
+                except ChildProcessError:
+                    #if child process is reaped
+                    self.exit_status = None
+
+                finally:
+                    self.pid = None
 
 
 if __name__ == "__main__":
@@ -88,4 +114,7 @@ if __name__ == "__main__":
 
     finally:
         termios.tcsetattr(stdin_fd,termios.TCSADRAIN, old_settings )
-        manager.close()   
+        manager.close()
+    print(f"Exit status: {manager.exit_status}", flush=True)
+    print(f"PID after close: {manager.pid}", flush=True)
+    print(f"FD after close: {manager.fd}", flush=True)  
