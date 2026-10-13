@@ -115,6 +115,3 @@ if __name__ == "__main__":
     finally:
         termios.tcsetattr(stdin_fd,termios.TCSADRAIN, old_settings )
         manager.close()
-    print(f"Exit status: {manager.exit_status}", flush=True)
-    print(f"PID after close: {manager.pid}", flush=True)
-    print(f"FD after close: {manager.fd}", flush=True)  
