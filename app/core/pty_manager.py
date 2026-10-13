@@ -1,7 +1,10 @@
-
+#all the imports
 import pty
 import os
 import select
+import sys
+import termios
+import tty
 
 
 class PTYManager:
@@ -18,7 +21,6 @@ class PTYManager:
     def write(self, data):
         if self.fd is None:
             return
-
         os.write(self.fd, data)
 
     def read(self):
@@ -51,32 +53,39 @@ if __name__ == "__main__":
         flush=True
     )
 
-    try:
-        while True:
-            readable, _, _ = select.select(
-                [0, manager.fd], [], [], 0.1
-            )
-            readable.append(0)
+    stdin_fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(stdin_fd)
 
-            # Keyboard input -> Bash
-            if 0 in readable:
-                data = os.read(0,1024)
-                print(f"keyboard input :{data!r}",flush=True)
+    try:
+        tty.setraw(stdin_fd)
+
+        while(True):
+            readable, _, _ = select.select([stdin_fd,manager.fd],[],[],0.1)
+
+            #keyboard input -> bash
+            if stdin_fd in readable:
+                data  = os.read(stdin_fd,1024)
 
                 if not data:
                     break
 
                 manager.write(data)
 
-            # Bash output -> Terminal
+            #bash output -> terminal
             if manager.fd in readable:
-                data = manager.read()
+                try:
+                    data = os.read(manager.fd,1024)
 
-                if data:
-                    os.write(1, data)
+                except OSError:
+                    break
 
-    except KeyboardInterrupt:
-        pass
+                if not data:
+                    break
+
+                os.write(sys.stdout.fileno(), data)
+
+
 
     finally:
-        manager.close()
+        termios.tcsetattr(stdin_fd,termios.TCSADRAIN, old_settings )
+        manager.close()   
