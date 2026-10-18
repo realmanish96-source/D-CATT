@@ -5,7 +5,8 @@ import select
 import sys
 import termios
 import tty
-
+import errno
+import signal           
 
 class PTYManager:
     def __init__(self):
@@ -28,14 +29,16 @@ class PTYManager:
         if self.fd is None:
             return None
 
-        readable, _, _ = select.select(
-            [self.fd], [], [], 0.1
-        )
+        try:
+            return os.read(self.fd,1024)
+             
 
-        if self.fd in readable:
-            return os.read(self.fd, 1024)
+        except OSError as exc:
+            if exc.errno == errno.EIO:
+                return b""
 
-        return None
+            raise
+        
 
     def close(self):
         #close the file descripter
@@ -60,7 +63,7 @@ class PTYManager:
                         except InterruptedError:
                             continue
 
-                    self.exit_status = status
+                    self.exit_status = os.waitstatus_to_exitcode(status)
 
                 except ChildProcessError:
                     #if child process is reaped
@@ -99,16 +102,14 @@ if __name__ == "__main__":
 
             #bash output -> terminal
             if manager.fd in readable:
-                try:
-                    data = os.read(manager.fd,1024)
+                data = manager.read()
 
-                except OSError:
+                if data == b"":
                     break
 
-                if not data:
-                    break
+                if data is not None:
+                    os.write(sys.stdout.fileno(), data)
 
-                os.write(sys.stdout.fileno(), data)
 
 
 
