@@ -1,12 +1,11 @@
-#all the imports
-import pty
-import os
-import select
-import sys
-import termios
-import tty
+# Linux-specific imports
 import errno
-import signal           
+import os
+import pty
+import select
+import signal
+import time
+
 
 class PTYManager:
     def __init__(self):
@@ -23,6 +22,7 @@ class PTYManager:
     def write(self, data):
         if self.fd is None:
             return
+
         os.write(self.fd, data)
 
     def read(self):
@@ -30,18 +30,56 @@ class PTYManager:
             return None
 
         try:
-            return os.read(self.fd,1024)
-             
+            return os.read(self.fd, 1024)
 
         except OSError as exc:
+            # EIO usually indicates that the PTY slave has closed
             if exc.errno == errno.EIO:
                 return b""
 
             raise
-        
+
+    def read_available(self, timeout=0.1):
+        if self.fd is None:
+            return None
+
+        readable, _, _ = select.select(
+            [self.fd],
+            [],
+            [],
+            timeout
+        )
+
+        if not readable:
+            return None
+
+        return self.read()
+
+    def _wait_for_exit(self, pid, timeout):
+        deadline = time.monotonic() + timeout
+
+        while time.monotonic() < deadline:
+            try:
+                waited_pid, status = os.waitpid(
+                    pid,
+                    os.WNOHANG
+                )
+
+            except InterruptedError:
+                continue
+
+            except ChildProcessError:
+                return True, None
+
+            if waited_pid == pid:
+                return True, os.waitstatus_to_exitcode(status)
+
+            time.sleep(0.05)
+
+        return False, None
 
     def close(self):
-        #close the file descripter
+        # Keep close() safe if called more than once
         fd = self.fd
         self.fd = None
 
@@ -50,69 +88,52 @@ class PTYManager:
                 os.close(fd)
 
         finally:
-            #child process reaper
             pid = self.pid
 
             if pid is not None:
                 try:
-                    while True:
+                    # Give the child process a moment to exit naturally
+                    finished, status = self._wait_for_exit(
+                        pid,
+                        0.5
+                    )
+
+                    if not finished:
                         try:
-                            waitedpid, status = os.waitpid(pid,0)
-                            break
+                            os.kill(pid, signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
 
-                        except InterruptedError:
-                            continue
+                        finished, status = self._wait_for_exit(
+                            pid,
+                            0.5
+                        )
 
-                    self.exit_status = os.waitstatus_to_exitcode(status)
+                    if not finished:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
 
-                except ChildProcessError:
-                    #if child process is reaped
-                    self.exit_status = None
+                        # Reap the forcibly terminated child
+                        while True:
+                            try:
+                                _, raw_status = os.waitpid(pid, 0)
+
+                                self.exit_status = (
+                                    os.waitstatus_to_exitcode(raw_status)
+                                )
+                                break
+
+                            except InterruptedError:
+                                continue
+
+                            except ChildProcessError:
+                                self.exit_status = None
+                                break
+
+                    else:
+                        self.exit_status = status
 
                 finally:
                     self.pid = None
-
-
-if __name__ == "__main__":
-    manager = PTYManager()
-    manager.start()
-
-    print(
-        f"PID: {manager.pid}, FD: {manager.fd}",
-        flush=True
-    )
-
-    stdin_fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(stdin_fd)
-
-    try:
-        tty.setraw(stdin_fd)
-
-        while(True):
-            readable, _, _ = select.select([stdin_fd,manager.fd],[],[],0.1)
-
-            #keyboard input -> bash
-            if stdin_fd in readable:
-                data  = os.read(stdin_fd,1024)
-
-                if not data:
-                    break
-
-                manager.write(data)
-
-            #bash output -> terminal
-            if manager.fd in readable:
-                data = manager.read()
-
-                if data == b"":
-                    break
-
-                if data is not None:
-                    os.write(sys.stdout.fileno(), data)
-
-
-
-
-    finally:
-        termios.tcsetattr(stdin_fd,termios.TCSADRAIN, old_settings )
-        manager.close()
