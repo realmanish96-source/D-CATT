@@ -1,53 +1,125 @@
 import sys
-from PySide6.QtWidgets import QApplication,QPushButton,QLabel,QWidget,QVBoxLayout, QHBoxLayout,QMainWindow,QPlainTextEdit
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication,QWidget,QVBoxLayout,QMainWindow,QPlainTextEdit
+from PySide6.QtCore import QTimer,Qt
+from app.core.session import TerminalSession
+from PySide6.QtGui import QTextCursor
 
+class TerminalWidget(QPlainTextEdit):
+    def __init__(self, session, parent=None):
+        super().__init__(parent)
+        self.session = session
+
+        self.setFocus()
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        text = event.text()
+
+        # Enter
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.session.write(b"\n")
+            event.accept()
+            return
+
+        # Backspace
+        if key == Qt.Key.Key_Backspace:
+            self.session.write(b"\x7f")
+            event.accept()
+            return
+
+        if text:
+            self.session.write(
+                text.encode("utf-8")
+            )
+            event.accept()
+            return
+
+        event.ignore()
+
+    
 class MainTerminalWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        # Terminal backend
+        self.session = TerminalSession()
+        self.session.start()
+
         self.initUI()
         self.textarea()
-    #basic terminal winodw UI
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.read_terminal_output)
+        self.timer.start(50)
+
     def initUI(self):
-
-
         self.setWindowTitle("D-CATT")
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
+
         self.vertical_layout = QVBoxLayout(central_widget)
 
-        #self.default_font = QLabel("Hello and Welcome to the D-CATT")
-        #self.vertical_layout.addWidget(self.default_font)
-
-        #self.default_font.setAlignment(Qt.AlignTop)
-
         self.setStyleSheet("""
-                            QMainWindow{
-                            background-color:black;
-                                        }
-                            QPlainTextEdit{
-                            background-color:black;
-                            border: none;
-                            font-size: 17px;
-                            color: white;
-                                        }
-                            """)
+            QMainWindow {
+                background-color: black;
+            }
 
-    #text area
+            QPlainTextEdit {
+                background-color: black;
+                border: none;
+                font-size: 17px;
+                color: white;
+            }
+        """)
+
     def textarea(self):
-        self.termainlediting = QPlainTextEdit()
-        self.vertical_layout.addWidget(self.termainlediting)
-        self.termainlediting.setPlaceholderText("Let's Get Started!")
+        self.termainlediting = TerminalWidget(
+        self.session,
+        self
+    )
 
-        
+        self.vertical_layout.addWidget(
+        self.termainlediting
+    )
 
+        self.termainlediting.setFocus()
 
-def Front_Window():
-    terminal = QApplication(sys.argv)
-    window = MainTerminalWindow()
-    window.showMaximized()
-    sys.exit(terminal.exec())
+    def keyPressEvent(self, event):
+        text = event.text()
 
+        if text:
+            self.session.write(text.encode())
 
-if (__name__ == '__main__'):
-    Front_Window()
+        elif event.key()== Qt.Key.Key_Return:
+            self.session.write(b"\n")
+
+        elif event.key() == Qt.Key.Key_Backspace:
+            self.session.write(b"\x7f")
+
+        event.accept()
+
+    def read_terminal_output(self):
+        data = self.session.read(timeout=0)
+
+        if data is None:
+            return
+
+        if data == b"":
+            self.timer.stop()
+            return
+
+        text = data.decode(
+            "utf-8",
+            errors="replace"
+        )
+
+        self.termainlediting.moveCursor(QTextCursor.MoveOperation.End)
+
+        self.termainlediting.insertPlainText(text)
+
+    def closeEvent(self, event):
+        self.timer.stop()
+        self.session.close()
+
+        event.accept()
