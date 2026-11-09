@@ -2,7 +2,7 @@ import sys
 from PySide6.QtWidgets import QApplication,QWidget,QVBoxLayout,QMainWindow,QPlainTextEdit
 from PySide6.QtCore import QTimer,Qt
 from app.core.session import TerminalSession
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QTextCursor,QGuiApplication
 
 class TerminalWidget(QPlainTextEdit):
     def __init__(self, session, parent=None):
@@ -14,6 +14,35 @@ class TerminalWidget(QPlainTextEdit):
     def keyPressEvent(self, event):
         key = event.key()
         text = event.text()
+        modifiers = event.modifiers()
+
+        # Ctrl+Shift+C copy method
+        if (
+            modifiers
+            == Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier and key == Qt.Key.Key_C
+        ):
+            self.copy()
+            event.accept()
+            return
+
+        #Ctrl+Shift+V paste method
+        if(
+            modifiers == Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier and key == Qt.Key.Key_V
+        ):
+            clipboard = QApplication.clipboard()
+            text = clipboard.text()
+
+            if text:
+                self.session.write(text.encode("utf-8"))
+
+            event.accept()
+            return
+
+        #Ctrl+C function
+        if(modifiers == Qt.KeyboardModifier.ControlModifier and key == Qt.Key.Key_C):
+            self.session.write(b"\x03")
+            event.accept()
+            return
 
         # Enter
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
