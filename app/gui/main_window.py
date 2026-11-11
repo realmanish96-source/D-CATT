@@ -3,7 +3,7 @@ from app.core.ansi_parser import ANSIParser
 from PySide6.QtWidgets import QApplication,QWidget,QVBoxLayout,QMainWindow,QPlainTextEdit
 from PySide6.QtCore import QTimer,Qt
 from app.core.session import TerminalSession
-from PySide6.QtGui import QTextCursor,QGuiApplication
+from PySide6.QtGui import QTextCursor,QGuiApplication,QFont
 
 class TerminalWidget(QPlainTextEdit):
     def __init__(self, session, parent=None):
@@ -12,14 +12,15 @@ class TerminalWidget(QPlainTextEdit):
 
         self.setFocus()
 
+    #single click control
     def mousePressEvent(self, event):
         self.setFocus()
-        self.accept()
-
+        event.accept()
+    #double click control
     def mouseDoubleClickEvent(self, event):
         self.setFocus()
-        self.accept()
-
+        event.accept()
+    #right click control
     def contextMenuEvent(self, event):
         event.accept()
 
@@ -27,6 +28,35 @@ class TerminalWidget(QPlainTextEdit):
         key = event.key()
         text = event.text()
         modifiers = event.modifiers()
+
+        #arrow keys
+        arrow_keys = {
+            Qt.Key.Key_Up: b"\x1b[A",
+            Qt.Key.Key_Down: b"\x1b[B",
+            Qt.Key.Key_Right: b"\x1b[C",
+            Qt.Key.Key_Left: b"\x1b[D"
+        }
+        if key in arrow_keys:
+            self.session.write(arrow_keys[key])
+            event.accept()
+            return
+
+        #special keys 
+        special_keys = {
+            Qt.Key.Key_Up: b"\x1b[A",
+            Qt.Key.Key_Down: b"\x1b[B",
+            Qt.Key.Key_Right: b"\x1b[C",
+            Qt.Key.Key_Left: b"\x1b[D",
+            Qt.Key.Key_Return: b"\r",
+            Qt.Key.Key_Enter: b"\r",
+            Qt.Key.Key_Backspace: b"\x7f",
+            Qt.Key.Key_Tab: b"\t",
+            Qt.Key.Key_Escape: b"\x1b"
+        }
+        if key in special_keys:
+            self.session.write(special_keys[key])
+            event.accept()
+            return
 
         # Ctrl+Shift+C copy method
         if (
@@ -160,14 +190,21 @@ class MainTerminalWindow(QMainWindow):
         x = self.ansi_parser.screen.cursor.x
         y = self.ansi_parser.screen.cursor.y
 
-        columns = self.ansi_parser.screen.columns
-        position = y * (columns + 1) + x
-
         cursor = self.termainlediting.textCursor()
-        cursor.setPosition(position)
+
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+
+        cursor.movePosition(
+        QTextCursor.MoveOperation.Down,
+        QTextCursor.MoveMode.MoveAnchor,y
+        )
+
+        cursor.movePosition(
+        QTextCursor.MoveOperation.Right,
+        QTextCursor.MoveMode.MoveAnchor,x
+        )       
 
         self.termainlediting.setTextCursor(cursor)
-        self.termainlediting.ensureCursorVisible()
 
     def closeEvent(self, event):
         self.timer.stop()
