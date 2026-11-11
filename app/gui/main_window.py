@@ -1,4 +1,5 @@
 import sys
+from app.core.ansi_parser import ANSIParser
 from PySide6.QtWidgets import QApplication,QWidget,QVBoxLayout,QMainWindow,QPlainTextEdit
 from PySide6.QtCore import QTimer,Qt
 from app.core.session import TerminalSession
@@ -10,6 +11,17 @@ class TerminalWidget(QPlainTextEdit):
         self.session = session
 
         self.setFocus()
+
+    def mousePressEvent(self, event):
+        self.setFocus()
+        self.accept()
+
+    def mouseDoubleClickEvent(self, event):
+        self.setFocus()
+        self.accept()
+
+    def contextMenuEvent(self, event):
+        event.accept()
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -73,6 +85,8 @@ class MainTerminalWindow(QMainWindow):
         # Terminal backend
         self.session = TerminalSession()
         self.session.start()
+
+        self.ansi_parser = ANSIParser(columns= 120, rows=30)
 
         self.initUI()
         self.textarea()
@@ -138,14 +152,22 @@ class MainTerminalWindow(QMainWindow):
             self.timer.stop()
             return
 
-        text = data.decode(
-            "utf-8",
-            errors="replace"
-        )
+        self.ansi_parser.feed(data)
 
-        self.termainlediting.moveCursor(QTextCursor.MoveOperation.End)
+        display = self.ansi_parser.get_display()
+        self.termainlediting.setPlainText(display)
 
-        self.termainlediting.insertPlainText(text)
+        x = self.ansi_parser.screen.cursor.x
+        y = self.ansi_parser.screen.cursor.y
+
+        columns = self.ansi_parser.screen.columns
+        position = y * (columns + 1) + x
+
+        cursor = self.termainlediting.textCursor()
+        cursor.setPosition(position)
+
+        self.termainlediting.setTextCursor(cursor)
+        self.termainlediting.ensureCursorVisible()
 
     def closeEvent(self, event):
         self.timer.stop()
