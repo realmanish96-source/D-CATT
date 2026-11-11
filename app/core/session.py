@@ -19,6 +19,12 @@ class TerminalSession:
 
         self.pty.write(data)
 
+    def resize(self, rows, columns):
+        if not self.is_running:
+            return
+
+        self.pty.resize(rows, columns)
+
     def read(self, timeout=0.1):
         if not self.is_running:
             return None

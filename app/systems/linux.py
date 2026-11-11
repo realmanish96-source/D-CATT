@@ -1,9 +1,12 @@
 # Linux-specific imports
 import errno
+import fcntl
 import os
 import pty
 import select
 import signal
+import struct
+import termios
 import time
 
 
@@ -24,6 +27,13 @@ class PTYManager:
             return
 
         os.write(self.fd, data)
+
+    def resize(self, rows, columns):
+        if self.fd is None:
+            return
+
+        winsize = struct.pack("HHHH", rows, columns, 0, 0)
+        fcntl.ioctl(self.fd, termios.TIOCSWINSZ, winsize)
 
     def read(self):
         if self.fd is None:

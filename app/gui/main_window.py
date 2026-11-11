@@ -1,16 +1,48 @@
 import sys
+from pathlib import Path
+
+if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from app.core.ansi_parser import ANSIParser
 from PySide6.QtWidgets import QApplication,QWidget,QVBoxLayout,QMainWindow,QPlainTextEdit
 from PySide6.QtCore import QTimer,Qt
 from app.core.session import TerminalSession
-from PySide6.QtGui import QTextCursor,QGuiApplication,QFont
+from PySide6.QtGui import QTextCursor,QFontDatabase
 
 class TerminalWidget(QPlainTextEdit):
-    def __init__(self, session, parent=None):
+    def __init__(self, session, resize_callback, parent=None):
         super().__init__(parent)
         self.session = session
+        self.resize_callback = resize_callback
+        self.last_terminal_size = None
 
+        font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        font.setPointSize(17)
+        self.setFont(font)
+        self.document().setDocumentMargin(0)
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setFocus()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        cell_width = self.fontMetrics().horizontalAdvance("M")
+        cell_height = self.fontMetrics().lineSpacing()
+        if cell_width <= 0 or cell_height <= 0:
+            return
+
+        columns = self.viewport().width() // cell_width
+        rows = self.viewport().height() // cell_height
+        if columns <= 0 or rows <= 0:
+            return
+
+        size = (columns, rows)
+        if size != self.last_terminal_size:
+            self.last_terminal_size = size
+            self.resize_callback(columns, rows)
 
     #single click control
     def mousePressEvent(self, event):
@@ -116,7 +148,7 @@ class MainTerminalWindow(QMainWindow):
         self.session = TerminalSession()
         self.session.start()
 
-        self.ansi_parser = ANSIParser(columns= 120, rows=30)
+        self.ansi_parser = ANSIParser(columns=80, rows=24)
 
         self.initUI()
         self.textarea()
@@ -149,6 +181,7 @@ class MainTerminalWindow(QMainWindow):
     def textarea(self):
         self.termainlediting = TerminalWidget(
         self.session,
+        self.resize_terminal,
         self
     )
 
@@ -157,6 +190,10 @@ class MainTerminalWindow(QMainWindow):
     )
 
         self.termainlediting.setFocus()
+
+    def resize_terminal(self, columns, rows):
+        self.ansi_parser.resize(columns, rows)
+        self.session.resize(rows, columns)
 
     def keyPressEvent(self, event):
         text = event.text()
@@ -211,3 +248,12 @@ class MainTerminalWindow(QMainWindow):
         self.session.close()
 
         event.accept()
+
+
+if __name__ == "__main__":
+    from runpy import run_path
+
+    run_path(
+        str(Path(__file__).resolve().parents[2] / "main.py"),
+        run_name="__main__",
+    )

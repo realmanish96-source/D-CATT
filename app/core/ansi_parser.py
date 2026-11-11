@@ -24,11 +24,7 @@ class ANSIParser:
         Return the current terminal screen.
         """
 
-        lines = list(self.screen.display)
-        while lines and not lines[-1].strip():
-            lines.pop()
-
-        return "\n".join(lines)
+        return "\n".join(self.screen.display)
 
     def resize(self, columns, rows):
         """
