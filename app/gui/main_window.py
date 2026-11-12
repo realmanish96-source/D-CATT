@@ -6,16 +6,20 @@ if __name__ == "__main__":
 
 from app.core.ansi_parser import ANSIParser
 from PySide6.QtWidgets import QApplication,QWidget,QVBoxLayout,QMainWindow,QPlainTextEdit
-from PySide6.QtCore import QTimer,Qt
+from PySide6.QtCore import QTimer,Qt,QRect
 from app.core.session import TerminalSession
-from PySide6.QtGui import QTextCursor,QFontDatabase
+from PySide6.QtGui import QPainter,QTextCursor,QFontDatabase
 
 class TerminalWidget(QPlainTextEdit):
-    def __init__(self, session, resize_callback, parent=None):
+    def __init__(self, session,ansi_parser,refresh_callback, resize_callback, parent=None):
         super().__init__(parent)
         self.session = session
+        self.ansi_parser = ansi_parser
+        self.refresh_callback = refresh_callback
         self.resize_callback = resize_callback
         self.last_terminal_size = None
+        self.terminal_cursor = (0, 0)
+        self._wheel_remainder = 0
 
         font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
         font.setPointSize(17)
@@ -25,12 +29,15 @@ class TerminalWidget(QPlainTextEdit):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setFocus()
+        self.setCursorWidth(0)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
 
         cell_width = self.fontMetrics().horizontalAdvance("M")
-        cell_height = self.fontMetrics().lineSpacing()
+        cell_height = self.cursorRect().height()
+        if cell_height <= 0:
+            cell_height = self.fontMetrics().lineSpacing()
         if cell_width <= 0 or cell_height <= 0:
             return
 
@@ -46,14 +53,62 @@ class TerminalWidget(QPlainTextEdit):
 
     #single click control
     def mousePressEvent(self, event):
-        self.setFocus()
-        event.accept()
-    #double click control
+        super().mousePressEvent(event)
+
+
     def mouseDoubleClickEvent(self, event):
-        self.setFocus()
-        event.accept()
+        super().mouseDoubleClickEvent(event)
+
+    def set_terminal_cursor(self, x, y):
+        self.terminal_cursor = (x, y)
+        self.viewport().update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+
+        x, y = self.terminal_cursor
+        y = self.ansi_parser.get_cursor_display_row(y)
+        cell_width = self.fontMetrics().horizontalAdvance("M")
+        cell_height = self.fontMetrics().lineSpacing()
+        if y is None or cell_width <= 0 or cell_height <= 0:
+            return
+
+        line = self.document().findBlockByNumber(y)
+        if not line.isValid():
+            return
+
+        line_rect = self.cursorRect(QTextCursor(line))
+        x = min(max(x, 0), self.ansi_parser.screen.columns - 1)
+        cursor_rect = QRect(
+            x * cell_width,
+            line_rect.top(),
+            2,
+            max(cell_height, line_rect.height())
+        )
+        if not self.viewport().rect().intersects(cursor_rect):
+            return
+
+        painter = QPainter(self.viewport())
+        painter.fillRect(cursor_rect, Qt.GlobalColor.white)
+
     #right click control
     def contextMenuEvent(self, event):
+        event.accept()
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y()
+        if delta:
+            self._wheel_remainder += delta
+            steps = int(self._wheel_remainder / 120)
+            self._wheel_remainder -= steps * 120
+            lines = abs(steps) * 3
+            if steps > 0:
+                self.ansi_parser.scroll_up(lines)
+            elif steps < 0:
+                self.ansi_parser.scroll_down(lines)
+            if steps:
+                self.refresh_callback()
+
         event.accept()
 
     def keyPressEvent(self, event):
@@ -157,6 +212,9 @@ class MainTerminalWindow(QMainWindow):
         self.timer.timeout.connect(self.read_terminal_output)
         self.timer.start(50)
 
+    def update_terminal_cursor(self, x, y):
+        self.termainlediting.set_terminal_cursor(x, y)
+
     def initUI(self):
         self.setWindowTitle("D-CATT")
 
@@ -181,6 +239,8 @@ class MainTerminalWindow(QMainWindow):
     def textarea(self):
         self.termainlediting = TerminalWidget(
         self.session,
+        self.ansi_parser,
+        self.render_terminal,
         self.resize_terminal,
         self
     )
@@ -190,6 +250,30 @@ class MainTerminalWindow(QMainWindow):
     )
 
         self.termainlediting.setFocus()
+
+    def render_terminal(self):
+        display = self.ansi_parser.get_display()
+
+        if self.termainlediting.toPlainText() != display:
+            cursor = self.termainlediting.textCursor()
+            anchor = cursor.anchor()
+            position = cursor.position()
+
+            self.termainlediting.setPlainText(display)
+
+            last_position = self.termainlediting.document().characterCount() - 1
+            cursor = QTextCursor(self.termainlediting.document())
+            cursor.setPosition(min(anchor, last_position))
+            cursor.setPosition(
+                min(position, last_position),
+                QTextCursor.MoveMode.KeepAnchor
+            )
+            self.termainlediting.setTextCursor(cursor)
+
+        self.update_terminal_cursor(
+            self.ansi_parser.screen.cursor.x,
+            self.ansi_parser.screen.cursor.y
+        )
 
     def resize_terminal(self, columns, rows):
         self.ansi_parser.resize(columns, rows)
@@ -219,29 +303,11 @@ class MainTerminalWindow(QMainWindow):
             self.timer.stop()
             return
 
+    # Feed PTY output into ANSI parser
         self.ansi_parser.feed(data)
 
-        display = self.ansi_parser.get_display()
-        self.termainlediting.setPlainText(display)
-
-        x = self.ansi_parser.screen.cursor.x
-        y = self.ansi_parser.screen.cursor.y
-
-        cursor = self.termainlediting.textCursor()
-
-        cursor.movePosition(QTextCursor.MoveOperation.Start)
-
-        cursor.movePosition(
-        QTextCursor.MoveOperation.Down,
-        QTextCursor.MoveMode.MoveAnchor,y
-        )
-
-        cursor.movePosition(
-        QTextCursor.MoveOperation.Right,
-        QTextCursor.MoveMode.MoveAnchor,x
-        )       
-
-        self.termainlediting.setTextCursor(cursor)
+    # Render the current terminal screen
+        self.render_terminal()
 
     def closeEvent(self, event):
         self.timer.stop()
