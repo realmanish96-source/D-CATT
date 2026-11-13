@@ -10,6 +10,29 @@ from PySide6.QtCore import QTimer,Qt,QRectF
 from app.core.session import TerminalSession
 from PySide6.QtGui import QPainter,QTextCursor,QFontDatabase,QTextCharFormat,QColor,QFontMetricsF
 
+
+_BRIGHT_ANSI_COLORS = {
+    "brightblack": "#7f7f7f",
+    "brightred": "#ff0000",
+    "brightgreen": "#00ff00",
+    "brightbrown": "#ffff00",
+    "brightblue": "#5c5cff",
+    "brightmagenta": "#ff00ff",
+    "brightcyan": "#00ffff",
+    "brightwhite": "#ffffff",
+}
+
+
+def _terminal_color(color):
+    color = _BRIGHT_ANSI_COLORS.get(color, color)
+    if len(color) == 6 and all(
+        character in "0123456789abcdefABCDEF"
+        for character in color
+    ):
+        color = f"#{color}"
+    return QColor(color)
+
+
 class TerminalWidget(QPlainTextEdit):
     def __init__(self, session,ansi_parser,refresh_callback, resize_callback, parent=None):
         super().__init__(parent)
@@ -68,6 +91,9 @@ class TerminalWidget(QPlainTextEdit):
     def paintEvent(self, event):
         super().paintEvent(event)
 
+        if 800 not in self.ansi_parser.screen.mode:
+            return 
+
         cursor_rect = self._terminal_cursor_rect()
         if cursor_rect is None:
             return
@@ -121,10 +147,10 @@ class TerminalWidget(QPlainTextEdit):
                 fmt = QTextCharFormat()
 
                 if cell["fg"] != "default":
-                    fmt.setForeground(QColor(cell["fg"]))
+                    fmt.setForeground(_terminal_color(cell["fg"]))
 
                 if cell["bg"] != "default":
-                    fmt.setBackground(QColor(cell["bg"]))
+                    fmt.setBackground(_terminal_color(cell["bg"]))
 
                 fmt.setFontWeight(700 if cell["bold"] else 400)
                 fmt.setFontItalic(cell["italics"])
@@ -135,10 +161,10 @@ class TerminalWidget(QPlainTextEdit):
                     bg = cell["bg"]
 
                     if fg != "default":
-                        fmt.setBackground(QColor(fg))
+                        fmt.setBackground(_terminal_color(fg))
 
                     if bg != "default":
-                        fmt.setForeground(QColor(bg))
+                        fmt.setForeground(_terminal_color(bg))
 
                 cursor.insertText(cell["char"], fmt)
 
@@ -160,7 +186,8 @@ class TerminalWidget(QPlainTextEdit):
             [cell.copy() for cell in line]
             for line in styled_lines
         ]
-
+        self.viewport().update()
+        
     #right click control
     def contextMenuEvent(self, event):
         event.accept()

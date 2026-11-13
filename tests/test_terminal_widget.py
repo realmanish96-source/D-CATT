@@ -132,6 +132,33 @@ class TerminalWidgetLayoutTests(unittest.TestCase):
         )
         widget.close()
 
+    def test_indexed_truecolor_and_bright_ansi_colors_render(self):
+        parser = ANSIParser(columns=8, rows=2)
+        parser.feed(
+            "\x1b[38;5;196mP"
+            "\x1b[38;2;127;0;0mT"
+            "\x1b[91mB"
+        )
+        widget = TerminalWidget(
+            _Session(),
+            parser,
+            lambda: None,
+            lambda columns, rows: None
+        )
+        widget.set_styled_lines(parser.get_styled_display())
+
+        for position, expected_color in enumerate(
+            ("#ff0000", "#7f0000", "#ff0000")
+        ):
+            cursor = QTextCursor(widget.document())
+            cursor.setPosition(position + 1)
+            self.assertEqual(
+                cursor.charFormat().foreground().color(),
+                QColor(expected_color)
+            )
+
+        widget.close()
+
 
 if __name__ == "__main__":
     unittest.main()

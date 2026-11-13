@@ -20,7 +20,10 @@ class PTYManager:
         self.pid, self.fd = pty.fork()
 
         if self.pid == 0:
-            os.execlp("bash", "bash")
+            child_env = os.environ.copy()
+            child_env["TERM"] = "xterm-256color"
+            child_env["COLORTERM"] = "truecolor"
+            os.execvpe("bash", ["bash"], child_env)
 
     def write(self, data):
         if self.fd is None:
