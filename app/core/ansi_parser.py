@@ -46,6 +46,61 @@ class ANSIParser:
         lines.extend(self.screen.display[:self.screen.lines - len(lines)])
         return "\n".join(lines)
 
+    def get_styled_display(self):
+        """
+        Return the current visible terminal content as
+        rows containing pyte character cells.
+        Respects the current scroll position.
+        """
+
+        lines = []
+
+        # Live screen
+        if self.scroll_offset == 0:
+            source_lines = [
+                self.screen.buffer[y]
+                for y in range(self.screen.lines)
+            ]
+
+    # Scrollback + screen
+        else:
+            history = list(self.screen.history.top)
+
+            combined = history + [
+                self.screen.buffer[y]
+                for y in range(self.screen.lines)
+            ]
+
+            start = max(
+                0,
+                len(combined) - self.screen.lines - self.scroll_offset
+            )
+
+            source_lines = combined[
+                start:start + self.screen.lines
+            ]
+
+        for line in source_lines:
+            styled_line = []
+
+            for x in range(self.screen.columns):
+                char = line[x]
+
+                styled_line.append({
+                "char": char.data,
+                "fg": char.fg,
+                "bg": char.bg,
+                "bold": char.bold,
+                "italics": char.italics,
+                "underscore": char.underscore,
+                "reverse": char.reverse,
+                })
+
+            lines.append(styled_line)
+
+        return lines
+
+ 
     def scroll_up(self, lines=3):
         self.scroll_offset = min(
             len(self.screen.history.top),

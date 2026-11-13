@@ -6,9 +6,9 @@ if __name__ == "__main__":
 
 from app.core.ansi_parser import ANSIParser
 from PySide6.QtWidgets import QApplication,QWidget,QVBoxLayout,QMainWindow,QPlainTextEdit
-from PySide6.QtCore import QTimer,Qt,QRect
+from PySide6.QtCore import QTimer,Qt,QRectF
 from app.core.session import TerminalSession
-from PySide6.QtGui import QPainter,QTextCursor,QFontDatabase
+from PySide6.QtGui import QPainter,QTextCursor,QFontDatabase,QTextCharFormat,QColor,QFontMetricsF
 
 class TerminalWidget(QPlainTextEdit):
     def __init__(self, session,ansi_parser,refresh_callback, resize_callback, parent=None):
@@ -20,6 +20,7 @@ class TerminalWidget(QPlainTextEdit):
         self.last_terminal_size = None
         self.terminal_cursor = (0, 0)
         self._wheel_remainder = 0
+        self._styled_lines = None
 
         font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
         font.setPointSize(17)
@@ -34,15 +35,16 @@ class TerminalWidget(QPlainTextEdit):
     def resizeEvent(self, event):
         super().resizeEvent(event)
 
-        cell_width = self.fontMetrics().horizontalAdvance("M")
+        metrics = QFontMetricsF(self.font())
+        cell_width = metrics.horizontalAdvance("M")
         cell_height = self.cursorRect().height()
         if cell_height <= 0:
-            cell_height = self.fontMetrics().lineSpacing()
+            cell_height = metrics.lineSpacing()
         if cell_width <= 0 or cell_height <= 0:
             return
 
-        columns = self.viewport().width() // cell_width
-        rows = self.viewport().height() // cell_height
+        columns = int(self.viewport().width() // cell_width)
+        rows = int(self.viewport().height() // cell_height)
         if columns <= 0 or rows <= 0:
             return
 
@@ -66,30 +68,98 @@ class TerminalWidget(QPlainTextEdit):
     def paintEvent(self, event):
         super().paintEvent(event)
 
-        x, y = self.terminal_cursor
-        y = self.ansi_parser.get_cursor_display_row(y)
-        cell_width = self.fontMetrics().horizontalAdvance("M")
-        cell_height = self.fontMetrics().lineSpacing()
-        if y is None or cell_width <= 0 or cell_height <= 0:
+        cursor_rect = self._terminal_cursor_rect()
+        if cursor_rect is None:
             return
-
-        line = self.document().findBlockByNumber(y)
-        if not line.isValid():
-            return
-
-        line_rect = self.cursorRect(QTextCursor(line))
-        x = min(max(x, 0), self.ansi_parser.screen.columns - 1)
-        cursor_rect = QRect(
-            x * cell_width,
-            line_rect.top(),
-            2,
-            max(cell_height, line_rect.height())
-        )
-        if not self.viewport().rect().intersects(cursor_rect):
+        if not QRectF(self.viewport().rect()).intersects(cursor_rect):
             return
 
         painter = QPainter(self.viewport())
         painter.fillRect(cursor_rect, Qt.GlobalColor.white)
+
+    def _terminal_cursor_rect(self):
+        x, y = self.terminal_cursor
+        y = self.ansi_parser.get_cursor_display_row(y)
+        if y is None:
+            return None
+
+        block = self.document().findBlockByNumber(y)
+        if not block.isValid():
+            return None
+
+        x = min(max(x, 0), self.ansi_parser.screen.columns - 1)
+        line_cursor = QTextCursor(block)
+        line_cursor.setPosition(block.position() + x)
+        cursor_rect = self.cursorRect(line_cursor)
+        if cursor_rect.height() <= 0:
+            return None
+        return QRectF(
+            cursor_rect.x(),
+            cursor_rect.y(),
+            2,
+            cursor_rect.height()
+        )
+
+    def set_styled_lines(self, styled_lines):
+        if self._styled_lines == styled_lines:
+            return
+
+        old_cursor = self.textCursor()
+        anchor = old_cursor.anchor()
+        position = old_cursor.position()
+        vertical_scroll = self.verticalScrollBar().value()
+        horizontal_scroll = self.horizontalScrollBar().value()
+
+        cursor = QTextCursor(self.document())
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        cursor.beginEditBlock()
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.removeSelectedText()
+
+        for y, line in enumerate(styled_lines):
+            for cell in line:
+                fmt = QTextCharFormat()
+
+                if cell["fg"] != "default":
+                    fmt.setForeground(QColor(cell["fg"]))
+
+                if cell["bg"] != "default":
+                    fmt.setBackground(QColor(cell["bg"]))
+
+                fmt.setFontWeight(700 if cell["bold"] else 400)
+                fmt.setFontItalic(cell["italics"])
+                fmt.setFontUnderline(cell["underscore"])
+
+                if cell["reverse"]:
+                    fg = cell["fg"]
+                    bg = cell["bg"]
+
+                    if fg != "default":
+                        fmt.setBackground(QColor(fg))
+
+                    if bg != "default":
+                        fmt.setForeground(QColor(bg))
+
+                cursor.insertText(cell["char"], fmt)
+
+            if y < len(styled_lines) - 1:
+                cursor.insertBlock()
+
+        cursor.endEditBlock()
+        last_position = self.document().characterCount() - 1
+        cursor = QTextCursor(self.document())
+        cursor.setPosition(min(anchor, last_position))
+        cursor.setPosition(
+            min(position, last_position),
+            QTextCursor.MoveMode.KeepAnchor
+        )
+        self.setTextCursor(cursor)
+        self.verticalScrollBar().setValue(vertical_scroll)
+        self.horizontalScrollBar().setValue(horizontal_scroll)
+        self._styled_lines = [
+            [cell.copy() for cell in line]
+            for line in styled_lines
+        ]
 
     #right click control
     def contextMenuEvent(self, event):
@@ -252,27 +322,11 @@ class MainTerminalWindow(QMainWindow):
         self.termainlediting.setFocus()
 
     def render_terminal(self):
-        display = self.ansi_parser.get_display()
-
-        if self.termainlediting.toPlainText() != display:
-            cursor = self.termainlediting.textCursor()
-            anchor = cursor.anchor()
-            position = cursor.position()
-
-            self.termainlediting.setPlainText(display)
-
-            last_position = self.termainlediting.document().characterCount() - 1
-            cursor = QTextCursor(self.termainlediting.document())
-            cursor.setPosition(min(anchor, last_position))
-            cursor.setPosition(
-                min(position, last_position),
-                QTextCursor.MoveMode.KeepAnchor
-            )
-            self.termainlediting.setTextCursor(cursor)
-
+        styled_lines = self.ansi_parser.get_styled_display()
+        self.termainlediting.set_styled_lines(styled_lines)
         self.update_terminal_cursor(
-            self.ansi_parser.screen.cursor.x,
-            self.ansi_parser.screen.cursor.y
+        self.ansi_parser.screen.cursor.x,
+        self.ansi_parser.screen.cursor.y
         )
 
     def resize_terminal(self, columns, rows):
