@@ -91,8 +91,8 @@ class TerminalWidget(QPlainTextEdit):
     def paintEvent(self, event):
         super().paintEvent(event)
 
-        if 800 not in self.ansi_parser.screen.mode:
-            return 
+        if self.ansi_parser.screen.cursor.hidden:
+            return
 
         cursor_rect = self._terminal_cursor_rect()
         if cursor_rect is None:
@@ -198,39 +198,69 @@ class TerminalWidget(QPlainTextEdit):
             self._wheel_remainder += delta
             steps = int(self._wheel_remainder / 120)
             self._wheel_remainder -= steps * 120
-            lines = abs(steps) * 3
-            if steps > 0:
-                self.ansi_parser.scroll_up(lines)
-            elif steps < 0:
-                self.ansi_parser.scroll_down(lines)
-            if steps:
+            if steps and self.ansi_parser.mouse_tracking_enabled:
+                column, row = self._terminal_cell_at(
+                    event.position().toPoint()
+                )
+                direction = 1 if steps > 0 else -1
+                for _ in range(abs(steps)):
+                    self.session.write(
+                        self.ansi_parser.mouse_wheel_sequence(
+                            direction,
+                            column,
+                            row
+                        )
+                    )
+            elif steps and not self.ansi_parser.screen.alternate_screen_active:
+                lines = abs(steps) * 3
+                if steps > 0:
+                    self.ansi_parser.scroll_up(lines)
+                else:
+                    self.ansi_parser.scroll_down(lines)
                 self.refresh_callback()
 
         event.accept()
+
+    def _terminal_cell_at(self, position):
+        metrics = QFontMetricsF(self.font())
+        cell_width = metrics.horizontalAdvance("M")
+        cell_height = self.cursorRect().height() or metrics.lineSpacing()
+        if cell_width <= 0 or cell_height <= 0:
+            return 1, 1
+
+        position = self.viewport().mapFrom(self, position)
+        column = int(position.x() / cell_width) + 1
+        row = int(position.y() / cell_height) + 1
+        return (
+            min(max(column, 1), self.ansi_parser.screen.columns),
+            min(max(row, 1), self.ansi_parser.screen.lines),
+        )
 
     def keyPressEvent(self, event):
         key = event.key()
         text = event.text()
         modifiers = event.modifiers()
 
-        #arrow keys
+        # Arrow keys use SS3 sequences while application-cursor mode is active.
         arrow_keys = {
-            Qt.Key.Key_Up: b"\x1b[A",
-            Qt.Key.Key_Down: b"\x1b[B",
-            Qt.Key.Key_Right: b"\x1b[C",
-            Qt.Key.Key_Left: b"\x1b[D"
+            Qt.Key.Key_Up: "A",
+            Qt.Key.Key_Down: "B",
+            Qt.Key.Key_Right: "C",
+            Qt.Key.Key_Left: "D",
         }
         if key in arrow_keys:
-            self.session.write(arrow_keys[key])
+            final = arrow_keys[key]
+            sequence = (
+                f"\x1bO{final}"
+                if self.ansi_parser.application_cursor_keys
+                else f"\x1b[{final}"
+            )
+            self.session.write(sequence.encode("ascii"))
             event.accept()
             return
 
         #special keys 
         special_keys = {
-            Qt.Key.Key_Up: b"\x1b[A",
-            Qt.Key.Key_Down: b"\x1b[B",
-            Qt.Key.Key_Right: b"\x1b[C",
-            Qt.Key.Key_Left: b"\x1b[D",
             Qt.Key.Key_Return: b"\r",
             Qt.Key.Key_Enter: b"\r",
             Qt.Key.Key_Backspace: b"\x7f",
@@ -375,20 +405,19 @@ class MainTerminalWindow(QMainWindow):
         event.accept()
 
     def read_terminal_output(self):
-        data = self.session.read(timeout=0)
+        output = []
+        for _ in range(64):
+            data = self.session.read(timeout=0)
+            if data is None:
+                break
+            if data == b"":
+                self.timer.stop()
+                break
+            output.append(data)
 
-        if data is None:
-            return
-
-        if data == b"":
-            self.timer.stop()
-            return
-
-    # Feed PTY output into ANSI parser
-        self.ansi_parser.feed(data)
-
-    # Render the current terminal screen
-        self.render_terminal()
+        if output:
+            self.ansi_parser.feed(b"".join(output))
+            self.render_terminal()
 
     def closeEvent(self, event):
         self.timer.stop()
